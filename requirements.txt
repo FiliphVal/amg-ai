@@ -1,12 +1,7 @@
-yt-dlp 
-youtube-transcript-api
-langchain 
-langchain-community 
-chromadb 
-sentence-transformers
-langchain-google-genai 
-python-dotenv
 streamlit
-watchdog
-langchain-huggingface
+langchain
+langchain-community
 langchain-chroma
+langchain-google-genai
+python-dotenv
+chromadb
