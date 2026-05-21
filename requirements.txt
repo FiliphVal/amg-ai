@@ -3,6 +3,8 @@ langchain
 langchain-community
 langchain-chroma
 langchain-google-genai
+langchain-huggingface
+sentence-transformers
 python-dotenv
 chromadb
 protobuf<=3.20.3

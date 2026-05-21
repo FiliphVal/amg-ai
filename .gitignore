@@ -1,6 +1,6 @@
 # Miljöer och tunga mappar
 .venv/
-chroma_db/
+
 
 # Säkerhet och hemligheter
 .env

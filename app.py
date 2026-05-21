@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -57,12 +57,12 @@ def setup_rag_chain():
             chunks = text_splitter.split_documents(docs)
             
             # 3. Skapa vektordatabasen och spara den lokalt
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+            embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
             db = Chroma.from_documents(chunks, embeddings, persist_directory="./chroma_db")
             retriever = db.as_retriever(search_kwargs={"k": 10})
     else:
         # Om mappen redan finns (som på din lokala dator), ladda den som vanligt
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
         retriever = db.as_retriever(search_kwargs={"k": 10})
     
