@@ -1,0 +1,12 @@
+yt-dlp 
+youtube-transcript-api
+angchain 
+langchain-community 
+chromadb 
+sentence-transformers
+langchain-google-genai 
+python-dotenv
+streamlit
+watchdog
+langchain-huggingface
+langchain-chroma

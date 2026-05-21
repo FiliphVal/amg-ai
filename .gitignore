@@ -1,0 +1,18 @@
+# Miljöer och tunga mappar
+.venv/
+chroma_db/
+
+# Säkerhet och hemligheter
+.env
+cookies.txt # (Byt ut .json mot .pkl eller txt om din fil hette något annat!)
+cookies.json
+
+# Python cache och temporära filer
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Mac-specifika systemfiler
+.DS_Store
