@@ -1,6 +1,6 @@
 yt-dlp 
 youtube-transcript-api
-angchain 
+langchain 
 langchain-community 
 chromadb 
 sentence-transformers
