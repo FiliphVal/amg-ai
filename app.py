@@ -57,12 +57,12 @@ def setup_rag_chain():
             chunks = text_splitter.split_documents(docs)
             
             # 3. Skapa vektordatabasen och spara den lokalt
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
             db = Chroma.from_documents(chunks, embeddings, persist_directory="./chroma_db")
             retriever = db.as_retriever(search_kwargs={"k": 10})
     else:
         # Om mappen redan finns (som på din lokala dator), ladda den som vanligt
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
         db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
         retriever = db.as_retriever(search_kwargs={"k": 10})
     
