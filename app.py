@@ -82,14 +82,9 @@ def setup_rag_chain():
     condense_chain = condense_prompt | llm | StrOutputParser()
 
     def fetch_context(input_dict):
-        chat_history = input_dict.get("chat_history", [])
-        original_query = input_dict["input"]
-        
-        if len(chat_history) > 0:
-            standalone_query = condense_chain.invoke(input_dict)
-            docs = retriever.invoke(standalone_query)
-        else:
-            docs = retriever.invoke(original_query)
+        # Tvinga ALLA frågor genom Mellan-hjärnan så de alltid översätts till engelska
+        standalone_query = condense_chain.invoke(input_dict)
+        docs = retriever.invoke(standalone_query)
         return format_docs(docs)
 
 
