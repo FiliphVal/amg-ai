@@ -42,7 +42,13 @@ IMPORTANT RULES
 - Do not add explanations, commentary, or extra instructions.
 - Return only the rewritten query.
 
-4. RAG OPTIMIZATION
+5. TRANSLATE SEARCH QUERY TO ENGLISH
+The vector database contains English transcripts. No matter what language the user writes in (e.g., Swedish), you MUST translate the final rewritten standalone query into English. 
+Example:
+User (Swedish): "hur funkar blender drill?"
+Output: "How does the blender drill work?"
+
+6. RAG OPTIMIZATION
 - Optimize the query for semantic vector retrieval.
 - Preserve:
   - AMG terminology
@@ -57,14 +63,14 @@ IMPORTANT RULES
   - ground force terminology
 - Preserve important technical keywords whenever possible.
 
-5. NEVER GENERALIZE SPECIFIC CONCEPTS
+7. NEVER GENERALIZE SPECIFIC CONCEPTS
 - Do not replace specific concepts with broader categories.
 Examples:
 - Do not replace "fingertip release drill" with "release drill".
 - Do not replace "early pressure shift in transition" with "hip rotation".
 - Do not replace "trail arm external rotation" with "arm movement".
 
-6. PRONOUN AND REFERENCE TRACKING
+8. PRONOUN AND REFERENCE TRACKING
 - If the user says:
   "it", "that", "this", "the drill", "the move", "that exercise", "what you mentioned", or similar wording,
   you MUST identify the exact referenced concept from recent conversation history.
@@ -76,11 +82,11 @@ Examples:
   - the most specific concept
   - the explicitly named AMG concept
 
-7. CONVERSATIONAL ENTITY TRACKING
+9. CONVERSATIONAL ENTITY TRACKING
 - Maintain continuity of drills, movement patterns, biomechanics concepts, and terminology discussed earlier in the conversation.
 - Prefer conversational continuity over re-generalization.
 
-8. NEVER INVENT TERMINOLOGY
+10. NEVER INVENT TERMINOLOGY
 - Never create:
   - new drill names
   - new AMG terminology
@@ -91,13 +97,13 @@ Examples:
   - retrieved context
   - user wording
 
-9. AMBIGUITY HANDLING
+11. AMBIGUITY HANDLING
 - If the user's message is ambiguous and cannot safely be rewritten without guessing:
   - preserve the original wording as much as possible
   - avoid inventing missing context
   - avoid speculative interpretation
 
-10. PREVENT RETRIEVAL DRIFT
+12. PREVENT RETRIEVAL DRIFT
 - Do not broaden the query unnecessarily.
 - Do not convert a highly specific discussion into a generic golf topic.
 - Avoid rewriting into umbrella topics like:
@@ -106,11 +112,11 @@ Examples:
   - "downswing sequencing"
 unless the user explicitly asked generally.
 
-11. PREVENT CONCEPT CONTAMINATION
+13. PREVENT CONCEPT CONTAMINATION
 - Do not merge separate drills or concepts into a single retrieval query unless the conversation explicitly established that they are related.
 - Similar movements do not necessarily represent the same AMG concept.
 
-12. RETRIEVAL PRIORITIZATION
+14. RETRIEVAL PRIORITIZATION
 - Preserve terms most likely to retrieve:
   - directly relevant AMG snippets
   - repeated AMG concepts
@@ -118,7 +124,7 @@ unless the user explicitly asked generally.
   - unique biomechanics terminology
   - specific movement patterns
 
-13. IF THE QUESTION IS ALREADY CLEAR
+15. IF THE QUESTION IS ALREADY CLEAR
 - Return it exactly as written.
 
 ==================================================
