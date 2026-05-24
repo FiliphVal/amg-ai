@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 import base64
+import re
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -53,7 +54,7 @@ def setup_rag_chain():
         db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
         retriever = db.as_retriever(search_kwargs={"k": 10})
     
-    llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0.2, max_retries=1)
+    llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.2, max_retries=1)
     
     with open("condense_prompt.txt", "r", encoding="utf-8") as f:
         condense_system_prompt = f.read()
@@ -61,7 +62,17 @@ def setup_rag_chain():
     condense_chain = condense_prompt | llm | StrOutputParser()
 
     def fetch_context(input_dict):
-        standalone_query = condense_chain.invoke(input_dict)
+        # 1. Hämta ut enbart texten (eftersom inmatningen kan innehålla en bild)
+        raw_input = input_dict["input"]
+        text_query = raw_input[0]["text"] if isinstance(raw_input, list) else raw_input
+        
+        # 2. Är chatten helt ny? Slösa INTE ett API-anrop på Mellan-hjärnan!
+        if not input_dict.get("chat_history"):
+            standalone_query = text_query
+        else:
+            # Bara om vi har tidigare historik måste AI:n skriva om frågan
+            standalone_query = condense_chain.invoke({"chat_history": input_dict["chat_history"], "input": text_query})
+            
         docs = retriever.invoke(standalone_query)
         return format_docs(docs)
 
@@ -159,13 +170,27 @@ if "langchain_history" not in st.session_state:
     st.session_state.langchain_history = []
 
 for message in st.session_state.messages:
-    if message["role"] == "user" and isinstance(message["content"], list):
+    if message["role"] == "user":
         with st.chat_message("user"):
-            st.markdown(message["content"][0]["text"])
-            st.caption("[Innehåller en uppladdad bild]")
+            if isinstance(message["content"], list):
+                st.markdown(message["content"][0]["text"])
+                st.caption("[Innehåller en uppladdad bild]")
+            else:
+                st.markdown(message["content"])
     else:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        with st.chat_message("assistant"):
+            content = message["content"]
+            
+            # Leta efter video-taggar i historiken
+            video_ids = re.findall(r"\[ID:\s*([a-zA-Z0-9_-]+)\]", content)
+            clean_content = re.sub(r"\[ID:\s*[a-zA-Z0-9_-]+\]", "", content)
+            
+            # Skriv ut texten utan taggarna
+            st.markdown(clean_content)
+            
+            # Rendera videorna under texten
+            for vid in list(set(video_ids)):
+                st.video(f"https://www.youtube.com/watch?v={vid}")
 
 # --- Inmatningsfältet ---
 if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", accept_file=True, file_type=["png", "jpg", "jpeg"]):
@@ -227,8 +252,8 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
                 st.session_state.messages.append({"role": "assistant", "content": clean_response})
                 save_message_to_db(st.session_state.current_session_id, "assistant", clean_response)
                 
-                st.session_state.langchain_history.append(HumanMessage(content=prompt))
-                st.session_state.langchain_history.append(AIMessage(content=full_response))
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                save_message_to_db(st.session_state.current_session_id, "assistant", full_response)
                 
                 # --- BLIXTSNABB LOKAL NAMNGIVNING EFTER SVARET ---
                 # Om det var första konversationen i denna chatt, döp om och ladda om
