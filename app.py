@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import base64
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -8,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough
+
 
 # 1. Konfigurera hur webbsidan ska se ut
 st.set_page_config(page_title="AMG Coach Pro", page_icon="🏌️‍♂️", layout="centered")
@@ -33,6 +35,12 @@ def format_docs(docs):
         formatted_texts.append(f"KÄLLA: {youtube_link}\n{doc.page_content}")
         
     return "\n\n".join(formatted_texts)
+
+def get_image_base64(uploaded_file):
+    image_bytes = uploaded_file.read()
+    encoded = base64.b64encode(image_bytes).decode('utf-8')
+    mime_type = uploaded_file.type
+    return f"data:{mime_type};base64,{encoded}"
 
 # 2. Cacha hjärnan och databasen så de inte laddas om vid varje knapptryck
 @st.cache_resource
@@ -119,38 +127,63 @@ if "langchain_history" not in st.session_state:
 
 # Skriv ut alla tidigare meddelanden på skärmen (för användaren)
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    if message["role"] == "user" and isinstance(message["content"], list):
+        # Om det är ett multimodalt meddelande från historiken, skriv ut texten
+        with st.chat_message("user"):
+            st.markdown(message["content"][0]["text"])
+            st.caption("[Innehåller en uppladdad bild]")
+    else:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
 # 4. Inmatningsfältet
 # 4. Inmatningsfältet (nu med inbyggd bilduppladdning!)
 # Vi lägger till accept_file=True och file_type i funktionen
 if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", accept_file=True, file_type=["png", "jpg", "jpeg"]):
     
-    # När accept_file är aktiverat returnerar Streamlit ett objekt som innehåller både .text och .files
     prompt = user_input.text
+    has_image = hasattr(user_input, "files") and user_input.files
     
-    # 1. Om användaren har skrivit text: Visa och spara den
-    if prompt:
+    # Förbered vad vi ska skicka till AI:n
+    ai_input_content = prompt
+    
+    # 1. Om användaren laddade upp en bild
+    if has_image:
+        uploaded_image = user_input.files[0]
+        base64_image = get_image_base64(uploaded_image)
+        
+        # Om användaren laddade upp en bild men inte skrev någon text, skapa en default-text
+        if not prompt:
+            prompt = "Analysera denna svingbild enligt AMG:s principer."
+            
+        with st.chat_message("user"):
+            st.image(uploaded_image, width=300)
+            st.markdown(prompt)
+            
+        # Spara i Session State (så det visas nästa gång sidan laddar)
+        # Vi sparar inte base64-bilden i 'messages' för UI-historiken för att spara prestanda, bara en indikation
+        st.session_state.messages.append({
+            "role": "user", 
+            "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": "dummy"}] 
+        })
+        
+        # Bygg LangChain-formatet för multimodal data
+        ai_input_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": base64_image}}
+        ]
+        
+    # 2. Om det bara var text
+    elif prompt:
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
-    # 2. Om användaren laddade upp en bild: Visa den i chatten
-    if hasattr(user_input, "files") and user_input.files:
-        uploaded_image = user_input.files[0]
-        with st.chat_message("user"):
-            st.image(uploaded_image, width=300)
-            st.caption("Uppladdad bild redo för analys")
-        # (Logiken för att faktiskt skicka bilden till Gemini bygger vi i nästa steg)
-        
-    # Kör bara igång AI-hjärnan om det faktiskt fanns en fråga att svara på
-    if prompt:
+
+    # Kör igång AI-hjärnan om det fanns input (text eller bild)
+    if prompt or has_image:
         with st.chat_message("assistant"):
-            # 1. Skapa en tom behållare på skärmen
             text_placeholder = st.empty()
             
-            # 2. Skjut in vår CSS-animation och HTML för "Tänker..." medan vi väntar
             tänker_html = """
             <style>
                 .pulsing-text {
@@ -170,17 +203,15 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
             
             full_response = ""
             
-            # 3. Starta strömmen från LangChain
+            # Skicka in ai_input_content istället för bara 'prompt'
             stream = rag_chain.stream({
-                "input": prompt,
+                "input": ai_input_content,
                 "chat_history": st.session_state.langchain_history
             })
             
-            # 4. När första bokstaven kommer, skrivs "Tänker..." automatiskt över
             for chunk in stream:
                 full_response += chunk
                 
-                # Gömma ID-taggar
                 if "[ID:" in full_response:
                     display_text = full_response.split("[ID:")[0]
                 else:
@@ -190,7 +221,6 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
                 
             text_placeholder.markdown(display_text)
             
-            # Hantera YouTube-länkar i botten
             import re
             video_ids = re.findall(r"\[ID: ([a-zA-Z0-9_-]+)\]", full_response)
             clean_response = re.sub(r"\[ID: [a-zA-Z0-9_-]+\]", "", full_response)
@@ -198,7 +228,8 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
             for vid in list(set(video_ids)):
                 st.video(f"https://www.youtube.com/watch?v={vid}")
                 
-        # Spara historiken
         st.session_state.messages.append({"role": "assistant", "content": clean_response})
+        
+        # Spara till LangChain History (vi sparar textversionen av prompten i historiken, att spara hela Base64 strängen sabbar ofta minnet för framtida frågor)
         st.session_state.langchain_history.append(HumanMessage(content=prompt))
         st.session_state.langchain_history.append(AIMessage(content=full_response))
