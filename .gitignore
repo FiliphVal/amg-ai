@@ -16,3 +16,5 @@ __pycache__/
 
 # Mac-specifika systemfiler
 .DS_Store
+
+amg_history.db
