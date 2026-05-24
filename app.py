@@ -132,25 +132,67 @@ if prompt := st.chat_input("Ställ en fråga om svingen..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Skapa rutan där AI:n tänker och svarar
+    # Skapa rutan där AI:n tänker och svarar
+    # Skapa rutan där AI:n tänker och svarar
     with st.chat_message("assistant"):
-        with st.spinner("Letar i AMG-arkivet..."):
-            response = rag_chain.invoke({
-                "input": prompt,
-                "chat_history": st.session_state.langchain_history
-            })
-            st.markdown(response)
+        # 1. Skapa en tom behållare på skärmen
+        text_placeholder = st.empty()
+        
+        # 2. Skjut in vår CSS-animation och HTML för "Tänker..." medan vi väntar
+        tänker_html = """
+        <style>
+            .pulsing-text {
+                animation: pulse 1.5s infinite;
+                color: #888;
+                font-style: italic;
+            }
+            @keyframes pulse {
+                0% { opacity: 0.4; }
+                50% { opacity: 1; }
+                100% { opacity: 0.4; }
+            }
+        </style>
+        <div class="pulsing-text">Tänker...</div>
+        """
+        text_placeholder.markdown(tänker_html, unsafe_allow_html=True)
+        
+        full_response = ""
+        
+        # 3. Starta strömmen från LangChain
+        stream = rag_chain.stream({
+            "input": prompt,
+            "chat_history": st.session_state.langchain_history
+        })
+        
+        # 4. När första bokstaven kommer, skrivs "Tänker..." automatiskt över!
+        for chunk in stream:
+            full_response += chunk
             
-            # Kolla om AI:n har skrivit ut något ID som vi kan visa
-            import re
-            video_ids = re.findall(r"\[ID: ([a-zA-Z0-9_-]+)\]", response)
+            # Gömma ID-taggar (som vi gjorde innan)
+            if "[ID:" in full_response:
+                display_text = full_response.split("[ID:")[0]
+            else:
+                display_text = full_response
+                
+            # Uppdatera skärmen live
+            text_placeholder.markdown(display_text + "▌")
             
-            # Visa en unik video för varje hittat ID
-            for vid in list(set(video_ids)): # set() för att undvika dubbletter
-                st.video(f"https://www.youtube.com/watch?v={vid}")
+        # Ta bort markören när den är klar
+        text_placeholder.markdown(display_text)
+        
+        # 3. Nu när allt är nedladdat, kör vi vår regex för att plocka ut alla ID:n
+        import re
+        video_ids = re.findall(r"\[ID: ([a-zA-Z0-9_-]+)\]", full_response)
+        
+        # 4. Radera ID-taggarna permanent från texten som sparas i historiken
+        clean_response = re.sub(r"\[ID: [a-zA-Z0-9_-]+\]", "", full_response)
+        
+        # 5. Rendera ut YouTubespelarna direkt under texten
+        for vid in list(set(video_ids)):
+            st.video(f"https://www.youtube.com/watch?v={vid}")
+            
+    # Spara historiken exakt som förut
+    st.session_state.messages.append({"role": "assistant", "content": clean_response})
     
-    # Spara AI:ns svar i minnet för skärmen
-    st.session_state.messages.append({"role": "assistant", "content": response})
-    
-    # Spara i LangChains specifika format för att Mellan-hjärnan ska förstå kontexten i framtiden
     st.session_state.langchain_history.append(HumanMessage(content=prompt))
-    st.session_state.langchain_history.append(AIMessage(content=response))
+    st.session_state.langchain_history.append(AIMessage(content=full_response))
