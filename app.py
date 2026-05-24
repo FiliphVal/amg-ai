@@ -123,76 +123,82 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # 4. Inmatningsfältet
-if prompt := st.chat_input("Ställ en fråga om svingen..."):
-    # Visa användarens meddelande direkt på skärmen
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# 4. Inmatningsfältet (nu med inbyggd bilduppladdning!)
+# Vi lägger till accept_file=True och file_type i funktionen
+if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", accept_file=True, file_type=["png", "jpg", "jpeg"]):
     
-    # Spara vad användaren skrev i minnet
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    # När accept_file är aktiverat returnerar Streamlit ett objekt som innehåller både .text och .files
+    prompt = user_input.text
     
-    # Skapa rutan där AI:n tänker och svarar
-    # Skapa rutan där AI:n tänker och svarar
-    # Skapa rutan där AI:n tänker och svarar
-    with st.chat_message("assistant"):
-        # 1. Skapa en tom behållare på skärmen
-        text_placeholder = st.empty()
+    # 1. Om användaren har skrivit text: Visa och spara den
+    if prompt:
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # 2. Skjut in vår CSS-animation och HTML för "Tänker..." medan vi väntar
-        tänker_html = """
-        <style>
-            .pulsing-text {
-                animation: pulse 1.5s infinite;
-                color: #888;
-                font-style: italic;
-            }
-            @keyframes pulse {
-                0% { opacity: 0.4; }
-                50% { opacity: 1; }
-                100% { opacity: 0.4; }
-            }
-        </style>
-        <div class="pulsing-text">Tänker...</div>
-        """
-        text_placeholder.markdown(tänker_html, unsafe_allow_html=True)
+    # 2. Om användaren laddade upp en bild: Visa den i chatten
+    if hasattr(user_input, "files") and user_input.files:
+        uploaded_image = user_input.files[0]
+        with st.chat_message("user"):
+            st.image(uploaded_image, width=300)
+            st.caption("Uppladdad bild redo för analys")
+        # (Logiken för att faktiskt skicka bilden till Gemini bygger vi i nästa steg)
         
-        full_response = ""
-        
-        # 3. Starta strömmen från LangChain
-        stream = rag_chain.stream({
-            "input": prompt,
-            "chat_history": st.session_state.langchain_history
-        })
-        
-        # 4. När första bokstaven kommer, skrivs "Tänker..." automatiskt över!
-        for chunk in stream:
-            full_response += chunk
+    # Kör bara igång AI-hjärnan om det faktiskt fanns en fråga att svara på
+    if prompt:
+        with st.chat_message("assistant"):
+            # 1. Skapa en tom behållare på skärmen
+            text_placeholder = st.empty()
             
-            # Gömma ID-taggar (som vi gjorde innan)
-            if "[ID:" in full_response:
-                display_text = full_response.split("[ID:")[0]
-            else:
-                display_text = full_response
+            # 2. Skjut in vår CSS-animation och HTML för "Tänker..." medan vi väntar
+            tänker_html = """
+            <style>
+                .pulsing-text {
+                    animation: pulse 1.5s infinite;
+                    color: #888;
+                    font-style: italic;
+                }
+                @keyframes pulse {
+                    0% { opacity: 0.4; }
+                    50% { opacity: 1; }
+                    100% { opacity: 0.4; }
+                }
+            </style>
+            <div class="pulsing-text">Tänker...</div>
+            """
+            text_placeholder.markdown(tänker_html, unsafe_allow_html=True)
+            
+            full_response = ""
+            
+            # 3. Starta strömmen från LangChain
+            stream = rag_chain.stream({
+                "input": prompt,
+                "chat_history": st.session_state.langchain_history
+            })
+            
+            # 4. När första bokstaven kommer, skrivs "Tänker..." automatiskt över
+            for chunk in stream:
+                full_response += chunk
                 
-            # Uppdatera skärmen live
-            text_placeholder.markdown(display_text + "▌")
+                # Gömma ID-taggar
+                if "[ID:" in full_response:
+                    display_text = full_response.split("[ID:")[0]
+                else:
+                    display_text = full_response
+                    
+                text_placeholder.markdown(display_text + "▌")
+                
+            text_placeholder.markdown(display_text)
             
-        # Ta bort markören när den är klar
-        text_placeholder.markdown(display_text)
-        
-        # 3. Nu när allt är nedladdat, kör vi vår regex för att plocka ut alla ID:n
-        import re
-        video_ids = re.findall(r"\[ID: ([a-zA-Z0-9_-]+)\]", full_response)
-        
-        # 4. Radera ID-taggarna permanent från texten som sparas i historiken
-        clean_response = re.sub(r"\[ID: [a-zA-Z0-9_-]+\]", "", full_response)
-        
-        # 5. Rendera ut YouTubespelarna direkt under texten
-        for vid in list(set(video_ids)):
-            st.video(f"https://www.youtube.com/watch?v={vid}")
+            # Hantera YouTube-länkar i botten
+            import re
+            video_ids = re.findall(r"\[ID: ([a-zA-Z0-9_-]+)\]", full_response)
+            clean_response = re.sub(r"\[ID: [a-zA-Z0-9_-]+\]", "", full_response)
             
-    # Spara historiken exakt som förut
-    st.session_state.messages.append({"role": "assistant", "content": clean_response})
-    
-    st.session_state.langchain_history.append(HumanMessage(content=prompt))
-    st.session_state.langchain_history.append(AIMessage(content=full_response))
+            for vid in list(set(video_ids)):
+                st.video(f"https://www.youtube.com/watch?v={vid}")
+                
+        # Spara historiken
+        st.session_state.messages.append({"role": "assistant", "content": clean_response})
+        st.session_state.langchain_history.append(HumanMessage(content=prompt))
+        st.session_state.langchain_history.append(AIMessage(content=full_response))
