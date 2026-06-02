@@ -4,7 +4,7 @@ from langchain_chroma import Chroma
 
 def search_amg_database(query):
     # 1. Ladda in samma matematiska modell som vi byggde databasen med
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
     
     # 2. Koppla upp oss mot den befintliga databasen
     db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
