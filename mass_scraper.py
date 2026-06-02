@@ -17,25 +17,37 @@ def download_all_transcripts():
         return
 
     video_ids = all_video_ids[:420]
-    print("Startar nedladdning (Manuell VPN-strategi)...\n")
+    
+    missing_video_ids = []
+    skipped_count = 0
+    for v_id in video_ids:
+        filepath = os.path.join(output_dir, f"{v_id}.txt")
+        if os.path.exists(filepath):
+            skipped_count += 1
+        else:
+            missing_video_ids.append(v_id)
+            
+    print("="*40)
+    print(f"HITTADE TIDIGARE KÖRNINGAR:")
+    print(f"Redan existerande transkriberingar: {skipped_count}/{len(video_ids)}")
+    print(f"Saknade videor kvar att hämta: {len(missing_video_ids)}")
+    print("="*40)
+    
+    if not missing_video_ids:
+        print("Alla 420 videor är redan nedladdade!")
+        return
+
+    print("Startar nedladdning för de saknade videorna (Manuell VPN-strategi)...\n")
     
     success_count = 0
     fail_count = 0
-    skipped_count = 0
     
     ytt_api = YouTubeTranscriptApi()
 
-    # Vi går tillbaka till en hederlig for-loop
-    for index, v_id in enumerate(video_ids, start=1):
+    for index, v_id in enumerate(missing_video_ids, start=1):
         filepath = os.path.join(output_dir, f"{v_id}.txt")
         
-        # Om filen finns sedan tidigare VPN-körningar, hoppa över!
-        if os.path.exists(filepath):
-            print(f"[{index}/{len(video_ids)}] {v_id} finns redan.")
-            skipped_count += 1
-            continue
-            
-        print(f"[{index}/{len(video_ids)}] Hämtar: {v_id}...", end=" ", flush=True)
+        print(f"[{index}/{len(missing_video_ids)}] Hämtar: {v_id}...", end=" ", flush=True)
         
         try:
             transcript = ytt_api.fetch(v_id)
@@ -63,8 +75,8 @@ def download_all_transcripts():
     print("\n" + "="*40)
     print("KÖRNING KLAR ELLER AVBRUTEN!")
     print(f"Nyhämtade: {success_count}")
-    print(f"Redan existerande: {skipped_count}")
-    print(f"Misslyckade: {fail_count}")
+    print(f"Redan existerande sedan tidigare: {skipped_count}")
+    print(f"Misslyckade i denna körning: {fail_count}")
     print("="*40)
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ def create_vector_db():
 
     print("3. Laddar in AI-modellen för att omvandla text till matematik...")
     # Laddar ner en liten, snabb och gratis modell från HuggingFace
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 
     print("\n4. Bygger Vektordatabasen (Detta tar lite tid, ha tålamod!)...")
     # Skapar databasen och sparar den permanent i en mapp som heter "chroma_db"

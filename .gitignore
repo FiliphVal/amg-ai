@@ -1,7 +1,6 @@
 # Miljöer och tunga mappar
 .venv/
 
-
 # Säkerhet och hemligheter
 .env
 cookies.txt # (Byt ut .json mot .pkl eller txt om din fil hette något annat!)
@@ -18,3 +17,7 @@ __pycache__/
 .DS_Store
 
 amg_history.db
+
+# Vektordatabas och sparade svingbilder
+chroma_db/
+uploaded_images/

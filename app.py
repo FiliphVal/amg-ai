@@ -1,7 +1,14 @@
 import os
+# Tysta irriterande varningar från Hugging Face, Transformers och PyTorch i terminalen
+import warnings
+warnings.filterwarnings("ignore")
+os.environ["PYTHONWARNINGS"] = "ignore"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import streamlit as st
 import base64
 import re
+import time
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -12,8 +19,102 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough
 from database import init_db, get_all_sessions, save_message_to_db, create_new_session, get_messages_for_session, delete_session, update_session_title
 
+# Skapa bildmappen för svinganalyser om den inte redan finns
+os.makedirs("uploaded_images", exist_ok=True)
+
 # Sätter menyn till stängd som standard
 st.set_page_config(page_title="AMG Coach Pro", page_icon="🏌️‍♂️", layout="centered", initial_sidebar_state="collapsed")
+
+# Lyxig Golf Coach Pro styling (Premium CSS-injektion)
+st.markdown("""
+<style>
+    /* Google Font Outfit */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+    
+    /* Global App Font and Accent Headers */
+    .stApp {
+        font-family: 'Outfit', 'Inter', sans-serif !important;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #e5c483 !important;
+        font-family: 'Outfit', 'Inter', sans-serif !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Sidebar Styling (Elegant Emerald Glassmorphism) */
+    section[data-testid="stSidebar"] {
+        background-color: #0c1811 !important;
+        border-right: 1px solid #1c3b26 !important;
+    }
+    
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3 {
+        color: #c5a059 !important;
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 600 !important;
+    }
+
+    /* Target ONLY Sidebar Buttons - No general button contamination! */
+    section[data-testid="stSidebar"] .stButton > button {
+        border-radius: 8px !important;
+        background-color: #122b1c !important;
+        color: #e5c483 !important;
+        border: 1px solid #c5a059 !important;
+        font-weight: 600 !important;
+        transition: all 0.25s ease-in-out !important;
+        padding: 8px 16px !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #c5a059 !important;
+        color: #0c1811 !important;
+        box-shadow: 0 4px 12px rgba(197, 160, 89, 0.3) !important;
+        transform: translateY(-1px) !important;
+        border-color: #e5c483 !important;
+    }
+    
+    /* Target Active Chatt Button in Sidebar (primary button class) */
+    section[data-testid="stSidebar"] div[data-testid="stColumn"] button[kind="primary"] {
+        background-color: #c5a059 !important;
+        color: #0c1811 !important;
+        border: 1px solid #e5c483 !important;
+        font-weight: 700 !important;
+        box-shadow: 0 4px 10px rgba(197, 160, 89, 0.4) !important;
+    }
+    
+    /* Premium Styling for source Expanders */
+    .stExpander {
+        background-color: #0c1811 !important;
+        border: 1px solid #1c3b26 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    .stExpander summary {
+        color: #e5c483 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #0e1117;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #1c3b26;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #c5a059;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🏌️‍♂️ AMG-Assistenten Pro")
 st.markdown("Ställ dina frågor om Athletic Motion Golf. Assistenten svarar enbart med fakta från databasen.")
 
@@ -25,6 +126,8 @@ def format_docs(docs):
         source = doc.metadata.get('source', 'Okänd källa')
         filename = os.path.basename(source)
         video_id = filename.replace(".txt", "")
+        if video_id.startswith("transcript_"):
+            video_id = video_id.replace("transcript_", "")
         youtube_link = f"https://www.youtube.com/watch?v={video_id}"
         formatted_texts.append(f"KÄLLA: {youtube_link}\n{doc.page_content}")
     return "\n\n".join(formatted_texts)
@@ -41,19 +144,19 @@ def setup_rag_chain():
     if not os.path.exists("./chroma_db"):
         from langchain_community.document_loaders import DirectoryLoader, TextLoader
         from langchain_text_splitters import RecursiveCharacterTextSplitter
-        with st.spinner("Hittade ingen databas. Bygger upp en ny..."):
+        with st.spinner("Hittade ingen databas. Bygger upp en ny med all-mpnet-base-v2..."):
             loader = DirectoryLoader("./transcripts", glob="*.txt", loader_cls=TextLoader, loader_kwargs={'encoding': 'utf-8'})
             docs = loader.load()
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             chunks = text_splitter.split_documents(docs)
-            embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
             db = Chroma.from_documents(chunks, embeddings, persist_directory="./chroma_db")
-            retriever = db.as_retriever(search_kwargs={"k": 10})
+            retriever = db.as_retriever(search_kwargs={"k": 12})
     else:
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
         db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
-        retriever = db.as_retriever(search_kwargs={"k": 10})
-    
+        retriever = db.as_retriever(search_kwargs={"k": 12})
+        
     llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.2, max_retries=1)
     
     with open("condense_prompt.txt", "r", encoding="utf-8") as f:
@@ -66,12 +169,8 @@ def setup_rag_chain():
         raw_input = input_dict["input"]
         text_query = raw_input[0]["text"] if isinstance(raw_input, list) else raw_input
         
-        # 2. Är chatten helt ny? Slösa INTE ett API-anrop på Mellan-hjärnan!
-        if not input_dict.get("chat_history"):
-            standalone_query = text_query
-        else:
-            # Bara om vi har tidigare historik måste AI:n skriva om frågan
-            standalone_query = condense_chain.invoke({"chat_history": input_dict["chat_history"], "input": text_query})
+        # 2. Skriv ALLTID om frågan för att översätta till engelska och lägga till AMG-biomekaniska sökord
+        standalone_query = condense_chain.invoke({"chat_history": input_dict.get("chat_history", []), "input": text_query})
             
         docs = retriever.invoke(standalone_query)
         return format_docs(docs)
@@ -121,6 +220,27 @@ with st.sidebar:
             st.session_state.current_session_id = create_new_session()
             saved_sessions = get_all_sessions()
 
+    # Pre-ladda hela den aktiva chattens historik vid uppstart (så att skärmen inte startar tomt)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+        st.session_state.langchain_history = []
+        
+        db_messages = get_messages_for_session(st.session_state.current_session_id)
+        for role, content in db_messages:
+            if content.startswith("[") and "image_url" in content:
+                import ast
+                try: parsed_content = ast.literal_eval(content)
+                except: parsed_content = content
+            else: parsed_content = content
+            
+            st.session_state.messages.append({"role": role, "content": parsed_content})
+            
+            if role == "user":
+                text_prompt = parsed_content[0]["text"] if isinstance(parsed_content, list) else parsed_content
+                st.session_state.langchain_history.append(HumanMessage(content=text_prompt))
+            else:
+                st.session_state.langchain_history.append(AIMessage(content=parsed_content))
+
     # Kompakt loop för chattar med 3-prickars meny (Popover)
     # Kompakt loop för chattar med 3-prickars meny (Popover)
     for sess_id, sess_title in saved_sessions:
@@ -164,17 +284,26 @@ with st.sidebar:
             if st.button("Ta bort", key=f"del_{sess_id}", use_container_width=True):
                 delete_dialog(sess_id)
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "langchain_history" not in st.session_state:
-    st.session_state.langchain_history = []
+# Chatt-historiken är nu förladdad och klar vid uppstart ovan!
 
 for message in st.session_state.messages:
     if message["role"] == "user":
         with st.chat_message("user"):
             if isinstance(message["content"], list):
-                st.markdown(message["content"][0]["text"])
-                st.caption("[Innehåller en uppladdad bild]")
+                # Hitta och visa bild om den finns
+                img_path = None
+                text_content = ""
+                for item in message["content"]:
+                    if item.get("type") == "image_url":
+                        img_path = item.get("image_url")
+                    elif item.get("type") == "text":
+                        text_content = item.get("text")
+                
+                if img_path and img_path != "dummy" and os.path.exists(img_path):
+                    st.image(img_path, width=300)
+                elif img_path == "dummy":
+                    st.caption("[Bild saknas i historiken]")
+                st.markdown(text_content)
             else:
                 st.markdown(message["content"])
     else:
@@ -188,9 +317,15 @@ for message in st.session_state.messages:
             # Skriv ut texten utan taggarna
             st.markdown(clean_content)
             
-            # Rendera videorna under texten
-            for vid in list(set(video_ids)):
-                st.video(f"https://www.youtube.com/watch?v={vid}")
+            # Rendera videorna under texten i en snygg st.expander för att undvika stök
+            if video_ids:
+                # Filtrera bort eventuella ogiltiga IDn (YouTube IDn är alltid exakt 11 tecken långa)
+                valid_vids = [v.replace("transcript_", "") for v in list(set(video_ids)) if len(v.replace("transcript_", "")) == 11]
+                if valid_vids:
+                    with st.expander("📺 Källvideor och instruktionsklipp (" + str(len(valid_vids)) + " st)"):
+                        for clean_vid in valid_vids:
+                            st.markdown(f"🔗 **[Öppna video på YouTube](https://www.youtube.com/watch?v={clean_vid})**")
+                            st.video(f"https://www.youtube.com/watch?v={clean_vid}")
 
 # --- Inmatningsfältet ---
 if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", accept_file=True, file_type=["png", "jpg", "jpeg"]):
@@ -200,6 +335,17 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
     
     if has_image:
         uploaded_image = user_input.files[0]
+        
+        # Generera ett unikt filnamn baserat på session_id och tidstämpel
+        import time
+        timestamp = int(time.time())
+        img_filename = f"{st.session_state.current_session_id}_{timestamp}.png"
+        img_path = os.path.join("uploaded_images", img_filename)
+        
+        # Spara bilden på disk
+        with open(img_path, "wb") as f:
+            f.write(uploaded_image.getbuffer())
+            
         base64_image = get_image_base64(uploaded_image)
         if not prompt: prompt = "Analysera denna svingbild enligt AMG:s principer."
             
@@ -207,7 +353,7 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
             st.image(uploaded_image, width=300)
             st.markdown(prompt)
             
-        content_to_save = [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": "dummy"}]
+        content_to_save = [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": img_path}]
         st.session_state.messages.append({"role": "user", "content": content_to_save})
         save_message_to_db(st.session_state.current_session_id, "user", content_to_save)
         
@@ -246,17 +392,22 @@ if user_input := st.chat_input("Ställ en fråga eller ladda upp en bild...", ac
                 video_ids = re.findall(r"\[ID: ([a-zA-Z0-9_-]+)\]", full_response)
                 clean_response = re.sub(r"\[ID: [a-zA-Z0-9_-]+\]", "", full_response)
                 
-                for vid in list(set(video_ids)):
-                    st.video(f"https://www.youtube.com/watch?v={vid}")
-                    
-                st.session_state.messages.append({"role": "assistant", "content": clean_response})
-                save_message_to_db(st.session_state.current_session_id, "assistant", clean_response)
+                # Visa källvideorna i en snygg expander i realtidssvaret också
+                if video_ids:
+                    valid_vids = [v.replace("transcript_", "") for v in list(set(video_ids)) if len(v.replace("transcript_", "")) == 11]
+                    if valid_vids:
+                        with st.expander("📺 Källvideor och instruktionsklipp (" + str(len(valid_vids)) + " st)"):
+                            for clean_vid in valid_vids:
+                                st.markdown(f"🔗 **[Öppna video på YouTube](https://www.youtube.com/watch?v={clean_vid})**")
+                                st.video(f"https://www.youtube.com/watch?v={clean_vid}")
                 
+                # Spara ENDAST full_response i session_state och databas (tar bort dubbelsparande)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 save_message_to_db(st.session_state.current_session_id, "assistant", full_response)
                 
                 # --- BLIXTSNABB LOKAL NAMNGIVNING EFTER SVARET ---
                 # Om det var första konversationen i denna chatt, döp om och ladda om
+                # (Längden på st.session_state.messages är nu exakt 2 eftersom dubbelsparandet är borta!)
                 if len(st.session_state.messages) == 2:
                     words = prompt.split()
                     short_title = " ".join(words[:3])
